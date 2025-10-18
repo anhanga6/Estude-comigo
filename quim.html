@@ -1,1 +1,505 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quadro Branco de Moléculas</title>
+    <!-- Carrega Tailwind CSS para estilização moderna e responsiva -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Define a fonte Inter como padrão */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Fundo mais suave */
+        }
+        /* Estilização específica para as bolinhas (átomos) */
+        .atom-ball {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: 700; /* Bold */
+            font-size: 18px;
+            cursor: grab;
+            transition: transform 0.15s ease-out, box-shadow 0.2s;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            user-select: none;
+        }
+        .atom-ball:active {
+            transform: scale(1.05);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+        }
+        /* Estilo do Quadro Branco */
+        #whiteboard {
+            background-color: #ffffff; /* Fundo branco puro */
+            border: 2px solid #cbd5e1; /* Borda leve */
+            border-radius: 12px;
+            cursor: crosshair;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
 
+    <!-- Cabeçalho Principal -->
+    <header class="mb-8 text-center">
+        <h1 class="text-3xl font-extrabold text-gray-800">🔬 Construtor Interativo de Moléculas</h1>
+        <p class="text-sm text-gray-500 mt-1">Quadro Branco para Ligar Átomos (118 Variações)</p>
+    </header>
+
+    <!-- Container Principal (Paleta e Quadro) -->
+    <div id="main-container" class="flex flex-col md:flex-row gap-6">
+
+        <!-- Área de Paleta de Elementos -->
+        <div id="palette" class="w-full md:w-56 p-4 bg-white rounded-xl shadow-lg h-full">
+            <h2 class="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">Paleta de Elementos</h2>
+            
+            <div id="atom-list" class="flex flex-wrap md:flex-col gap-3">
+                <!-- As bolinhas serão inseridas aqui via JavaScript -->
+            </div>
+
+            <p class="text-xs text-gray-400 mt-4">Arraste para o quadro. (Mock de 118)</p>
+        </div>
+
+        <!-- Área do Quadro Branco (Canvas) -->
+        <div id="whiteboard-container" class="flex-grow bg-white p-4 rounded-xl shadow-lg">
+            <h2 class="text-lg font-semibold mb-3 text-gray-700">Quadro Branco (Monte sua Molécula)</h2>
+            <canvas id="whiteboard" width="800" height="500" class="w-full"></canvas>
+            <!-- Nota: O JS ajustará o tamanho do Canvas para ser responsivo -->
+        </div>
+    </div>
+
+    <!-- Área de Controle e Resultados -->
+    <div id="controls" class="flex flex-col lg:flex-row gap-6 mt-6">
+        
+        <!-- Espaço 1: Resultado da Molécula Montada -->
+        <div class="result-box bg-white p-6 rounded-xl shadow-lg lg:w-1/2">
+            <h3 class="text-xl font-bold text-blue-600 mb-3">Fórmula Montada (Detecção)</h3>
+            <div class="p-3 bg-blue-50 rounded-lg">
+                <p id="formula-display" class="text-lg font-mono text-blue-800">Aguardando montagem...</p>
+            </div>
+            <p class="text-sm text-gray-500 mt-2">Clique em um átomo no quadro para selecionar e ligar.</p>
+        </div>
+
+        <!-- Espaço 2: Busca e Auto-Montagem -->
+        <div class="result-box bg-white p-6 rounded-xl shadow-lg lg:w-1/2">
+            <h3 class="text-xl font-bold text-green-600 mb-3">Buscar e Montar Molécula</h3>
+            <div class="flex flex-col sm:flex-row gap-3">
+                <input type="text" id="molecule-search" 
+                       placeholder="Ex: Água, Metano (H2O, CH4)"
+                       class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500">
+                <button onclick="autoAssemble()"
+                        class="px-6 py-3 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600 transition duration-150 whitespace-nowrap">
+                    Montar
+                </button>
+            </div>
+            <p id="search-status" class="text-sm mt-3 text-gray-600">Busque por fórmulas simples para auto-montar (Mock).</p>
+        </div>
+    </div>
+
+<script>
+// ===============================================
+// JAVASCRIPT: LÓGICA DO QUADRO BRANCO
+// Este código inclui a lógica base de inicialização, desenho e interação (arrastar/soltar).
+// ===============================================
+
+const ATOM_DATA = [
+    // Simulação das 118 variações. Usamos cores distintas e definimos as ligações possíveis.
+    { atom: 'H', name: 'Hidrogênio', color: '#ADD8E6', maxBonds: 1 },
+    { atom: 'O', name: 'Oxigênio', color: '#FF6347', maxBonds: 2 },
+    { atom: 'C', name: 'Carbono', color: '#4CAF50', maxBonds: 4 },
+    { atom: 'N', name: 'Nitrogênio', color: '#8A2BE2', maxBonds: 3 },
+    { atom: 'Cl', name: 'Cloro', color: '#7FFFD4', maxBonds: 1 },
+    { atom: 'Fe', name: 'Ferro', color: '#A0522D', maxBonds: 3 },
+    // Para ter as 118, o array seria expandido...
+];
+
+const whiteboard = document.getElementById('whiteboard');
+const ctx = whiteboard.getContext('2d');
+const atomListDiv = document.getElementById('atom-list');
+const formulaDisplay = document.getElementById('formula-display');
+
+let draggedAtom = null;
+let placedAtoms = [];
+let bonds = []; // Array para armazenar as ligações (linhas)
+
+let selectedAtom = null; // Átomo selecionado para iniciar uma ligação
+const ATOM_RADIUS = 30;
+
+// ===============================================
+// 1. Inicialização e Renderização da Paleta
+// ===============================================
+
+function initializePalette() {
+    ATOM_DATA.forEach(data => {
+        const ball = document.createElement('div');
+        ball.className = 'atom-ball';
+        ball.textContent = data.atom;
+        ball.style.backgroundColor = data.color;
+        
+        // Armazena dados no elemento HTML para uso no drag and drop
+        ball.setAttribute('draggable', 'true');
+        ball.dataset.atom = data.atom;
+        ball.dataset.color = data.color;
+        ball.dataset.maxbonds = data.maxBonds;
+
+        atomListDiv.appendChild(ball);
+
+        // Adiciona listener de dragstart
+        ball.addEventListener('dragstart', (e) => {
+            draggedAtom = {
+                data: data,
+                x: 0, 
+                y: 0
+            };
+            e.dataTransfer.setData('text/plain', data.atom);
+        });
+    });
+}
+
+// ===============================================
+// 2. Lógica de Desenho no Canvas
+// ===============================================
+
+function redrawCanvas() {
+    // 1. Limpa todo o canvas
+    ctx.clearRect(0, 0, whiteboard.width, whiteboard.height);
+
+    // 2. Desenha as Ligações (Bonds)
+    bonds.forEach(bond => {
+        const atomA = placedAtoms.find(a => a.id === bond.fromId);
+        const atomB = placedAtoms.find(a => a.id === bond.toId);
+
+        if (atomA && atomB) {
+            ctx.beginPath();
+            ctx.moveTo(atomA.x, atomA.y);
+            ctx.lineTo(atomB.x, atomB.y);
+            ctx.strokeStyle = '#333'; // Cor da ligação
+            ctx.lineWidth = 4;
+            ctx.stroke();
+        }
+    });
+
+    // 3. Desenha as Bolinhas (Átomos)
+    placedAtoms.forEach(atom => {
+        // Círculo base
+        ctx.beginPath();
+        ctx.arc(atom.x, atom.y, ATOM_RADIUS, 0, Math.PI * 2);
+        ctx.fillStyle = atom.color;
+        ctx.fill();
+        
+        // Borda e efeito de seleção
+        ctx.strokeStyle = atom.id === selectedAtom?.id ? '#FFD700' : '#333';
+        ctx.lineWidth = atom.id === selectedAtom?.id ? 5 : 2;
+        ctx.stroke();
+
+        // Letra (símbolo)
+        ctx.fillStyle = '#fff'; 
+        ctx.font = 'bold 24px Inter';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(atom.atom, atom.x, atom.y);
+
+        // Contador de ligações (para feedback visual)
+        const currentBonds = bonds.filter(b => b.fromId === atom.id || b.toId === atom.id).length;
+        ctx.fillStyle = currentBonds > atom.maxBonds ? '#FF0000' : '#000000';
+        ctx.font = '12px Inter';
+        ctx.fillText(`${currentBonds}/${atom.maxBonds}`, atom.x, atom.y + ATOM_RADIUS + 10);
+    });
+
+    updateFormulaDisplay();
+}
+
+// ===============================================
+// 3. Lógica de Interação (Drag, Click, Bonds)
+// ===============================================
+
+// 3.1. Arrastar e Soltar (Drop)
+whiteboard.addEventListener('dragover', (e) => { e.preventDefault(); });
+
+whiteboard.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const rect = whiteboard.getBoundingClientRect();
+    
+    // Coordenadas relativas ao canvas
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (draggedAtom) {
+        const newAtom = {
+            id: crypto.randomUUID(), // ID único para ligações
+            atom: draggedAtom.data.atom,
+            color: draggedAtom.data.color,
+            maxBonds: draggedAtom.data.maxBonds,
+            x: x,
+            y: y,
+        };
+        placedAtoms.push(newAtom);
+        draggedAtom = null;
+        redrawCanvas();
+    }
+});
+
+// 3.2. Clique para Seleção e Criação de Ligações
+whiteboard.addEventListener('click', (e) => {
+    const rect = whiteboard.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    // Tenta encontrar um átomo clicado
+    const clickedAtom = placedAtoms.find(atom => {
+        const distance = Math.sqrt(Math.pow(atom.x - clickX, 2) + Math.pow(atom.y - clickY, 2));
+        return distance <= ATOM_RADIUS;
+    });
+
+    if (clickedAtom) {
+        if (!selectedAtom) {
+            // Primeiro clique: Seleciona o átomo
+            selectedAtom = clickedAtom;
+        } else if (selectedAtom.id === clickedAtom.id) {
+            // Clicou no mesmo: Desseleciona
+            selectedAtom = null;
+        } else {
+            // Segundo clique: Cria ou remove a ligação
+            createOrRemoveBond(selectedAtom, clickedAtom);
+            selectedAtom = null; // Reseta seleção após tentar ligar
+        }
+    } else {
+        // Clicou fora de qualquer átomo: Desseleciona
+        selectedAtom = null;
+    }
+
+    redrawCanvas();
+});
+
+// 3.3. Função de Criação/Remoção de Ligação
+function createOrRemoveBond(atomA, atomB) {
+    // Cria um identificador único para a ligação, independente da ordem
+    const bondKeyA = `${atomA.id}-${atomB.id}`;
+    const bondKeyB = `${atomB.id}-${atomA.id}`;
+    
+    // Verifica se a ligação já existe
+    const existingBondIndex = bonds.findIndex(b => b.key === bondKeyA || b.key === bondKeyB);
+
+    if (existingBondIndex !== -1) {
+        // Se existir, remove (desliga)
+        bonds.splice(existingBondIndex, 1);
+    } else {
+        // Verifica se ambos os átomos ainda têm ligações disponíveis (Regra de Negócio)
+        const bondsA = bonds.filter(b => b.fromId === atomA.id || b.toId === atomA.id).length;
+        const bondsB = bonds.filter(b => b.fromId === atomB.id || b.toId === atomB.id).length;
+
+        if (bondsA < atomA.maxBonds && bondsB < atomB.maxBonds) {
+            // Se não existir e for permitido, cria a nova ligação
+            bonds.push({
+                key: bondKeyA, // Usa uma chave consistente
+                fromId: atomA.id,
+                toId: atomB.id,
+                type: 1 // Ligação simples (para futuro: 2 ou 3 para dupla/tripla)
+            });
+        } else {
+            // Alerta visual de limite
+            console.warn(`Limite de ligações atingido para ${atomA.atom} ou ${atomB.atom}.`);
+            // Em uma app real, você mostraria um feedback visual na tela.
+        }
+    }
+}
+
+// ------------------------------------------
+// 4. Lógica de Fórmulas e Auto-Montagem (Mock)
+// ------------------------------------------
+
+function updateFormulaDisplay() {
+    if (placedAtoms.length === 0) {
+        formulaDisplay.innerHTML = "Aguardando montagem...";
+        return;
+    }
+    
+    // Contagem de átomos
+    const counts = placedAtoms.reduce((acc, atom) => {
+        acc[atom.atom] = (acc[atom.atom] || 0) + 1;
+        return acc;
+    }, {});
+
+    // Constrói a fórmula (simplesmente conta átomos, sem verificar a estrutura)
+    const formula = Object.keys(counts)
+        .sort()
+        .map(atom => {
+            const count = counts[atom];
+            // Usa <sub> para subscrito na fórmula química
+            return `${atom}${count > 1 ? `<sub>${count}</sub>` : ''}`;
+        })
+        .join('');
+
+    formulaDisplay.innerHTML = formula;
+}
+
+function autoAssemble() {
+    const searchInput = document.getElementById('molecule-search').value.trim().toUpperCase();
+    const status = document.getElementById('search-status');
+    
+    // Zera o estado atual
+    placedAtoms = [];
+    bonds = [];
+    selectedAtom = null;
+
+    // --- Lógica de Auto-Montagem (Mock) ---
+    // Simula o banco de dados e a criação automática
+    
+    if (searchInput.includes('AGUA') || searchInput === 'H2O') {
+        const O = ATOM_DATA.find(a => a.atom === 'O');
+        const H = ATOM_DATA.find(a => a.atom === 'H');
+
+        // Posição central do Oxigênio
+        const ox = { ...O, id: crypto.randomUUID(), x: 400, y: 200, color: O.color, maxBonds: O.maxBonds };
+        // Posição dos Hidrogênios
+        const h1 = { ...H, id: crypto.randomUUID(), x: 350, y: 300, color: H.color, maxBonds: H.maxBonds };
+        const h2 = { ...H, id: crypto.randomUUID(), x: 450, y: 300, color: H.color, maxBonds: H.maxBonds };
+
+        placedAtoms.push(ox, h1, h2);
+        
+        // Ligações
+        bonds.push(
+            { key: `${ox.id}-${h1.id}`, fromId: ox.id, toId: h1.id, type: 1 },
+            { key: `${ox.id}-${h2.id}`, fromId: ox.id, toId: h2.id, type: 1 }
+        );
+
+        status.textContent = "Fórmula H₂O (Água) montada!";
+    } else if (searchInput.includes('METANO') || searchInput === 'CH4') {
+         const C = ATOM_DATA.find(a => a.atom === 'C');
+         const H = ATOM_DATA.find(a => a.atom === 'H');
+
+         const c = { ...C, id: crypto.randomUUID(), x: 400, y: 250, color: C.color, maxBonds: C.maxBonds };
+         const h = (dx, dy) => ({ ...H, id: crypto.randomUUID(), x: 400 + dx, y: 250 + dy, color: H.color, maxBonds: H.maxBonds });
+
+         const h1 = h(0, -100);
+         const h2 = h(100, 0);
+         const h3 = h(0, 100);
+         const h4 = h(-100, 0);
+
+         placedAtoms.push(c, h1, h2, h3, h4);
+         
+         // Ligações
+         bonds.push(
+            { key: `${c.id}-${h1.id}`, fromId: c.id, toId: h1.id, type: 1 },
+            { key: `${c.id}-${h2.id}`, fromId: c.id, toId: h2.id, type: 1 },
+            { key: `${c.id}-${h3.id}`, fromId: c.id, toId: h3.id, type: 1 },
+            { key: `${c.id}-${h4.id}`, fromId: c.id, toId: h4.id, type: 1 }
+         );
+
+        status.textContent = "Fórmula CH₄ (Metano) montada!";
+    } else {
+        status.textContent = `A molécula "${searchInput}" não está no banco de dados Mock. Tente "Água" ou "Metano".`;
+    }
+
+    redrawCanvas();
+}
+
+
+// ------------------------------------------
+// 5. Ajustes de Responsividade
+// ------------------------------------------
+
+function adjustCanvasSize() {
+    const container = document.getElementById('whiteboard-container');
+    // Define o tamanho real do Canvas com base no container
+    const newWidth = container.offsetWidth - 32; // - padding
+    
+    // Mantém a proporção se for muito estreito em mobile, mas garante um mínimo
+    whiteboard.width = newWidth > 800 ? 800 : newWidth; 
+    whiteboard.height = 500; 
+    redrawCanvas();
+}
+
+window.addEventListener('resize', adjustCanvasSize);
+window.onload = function() {
+    initializePalette();
+    adjustCanvasSize(); // Inicializa o tamanho e o desenho
+};
+
+// ------------------------------------------
+// 6. Funcionalidade de Arrastar Átomos no Canvas
+// ------------------------------------------
+let draggingCanvasAtom = null;
+let dragOffsetX, dragOffsetY;
+
+whiteboard.addEventListener('mousedown', (e) => {
+    const rect = whiteboard.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // Tenta encontrar um átomo para arrastar
+    draggingCanvasAtom = placedAtoms.find(atom => {
+        const distance = Math.sqrt(Math.pow(atom.x - mouseX, 2) + Math.pow(atom.y - mouseY, 2));
+        return distance <= ATOM_RADIUS;
+    });
+
+    if (draggingCanvasAtom) {
+        // Calcula o offset para que o clique seja no centro
+        dragOffsetX = mouseX - draggingCanvasAtom.x;
+        dragOffsetY = mouseY - draggingCanvasAtom.y;
+    }
+});
+
+whiteboard.addEventListener('mousemove', (e) => {
+    if (draggingCanvasAtom) {
+        const rect = whiteboard.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // Atualiza a posição do átomo
+        draggingCanvasAtom.x = mouseX - dragOffsetX;
+        draggingCanvasAtom.y = mouseY - dragOffsetY;
+
+        redrawCanvas();
+    }
+});
+
+whiteboard.addEventListener('mouseup', () => {
+    draggingCanvasAtom = null;
+});
+
+// Adiciona compatibilidade com toque para arrastar em dispositivos móveis
+whiteboard.addEventListener('touchstart', (e) => {
+    // Evita o scroll padrão
+    e.preventDefault(); 
+    
+    const touch = e.touches[0];
+    const rect = whiteboard.getBoundingClientRect();
+    const mouseX = touch.clientX - rect.left;
+    const mouseY = touch.clientY - rect.top;
+
+    draggingCanvasAtom = placedAtoms.find(atom => {
+        const distance = Math.sqrt(Math.pow(atom.x - mouseX, 2) + Math.pow(atom.y - mouseY, 2));
+        return distance <= ATOM_RADIUS;
+    });
+
+    if (draggingCanvasAtom) {
+        dragOffsetX = mouseX - draggingCanvasAtom.x;
+        dragOffsetY = mouseY - draggingCanvasAtom.y;
+    }
+});
+
+whiteboard.addEventListener('touchmove', (e) => {
+    if (draggingCanvasAtom) {
+        e.preventDefault(); 
+        const touch = e.touches[0];
+        const rect = whiteboard.getBoundingClientRect();
+        const mouseX = touch.clientX - rect.left;
+        const mouseY = touch.clientY - rect.top;
+
+        draggingCanvasAtom.x = mouseX - dragOffsetX;
+        draggingCanvasAtom.y = mouseY - dragOffsetY;
+
+        redrawCanvas();
+    }
+});
+
+whiteboard.addEventListener('touchend', () => {
+    draggingCanvasAtom = null;
+});
+</script>
+</body>
+</html>
